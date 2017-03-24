@@ -376,8 +376,11 @@ public class Camera1 extends CameraImpl {
 
         setFocus(mFocus);
         setFlash(mFlash);
-
-        mCamera.setParameters(mCameraParameters);
+        try {
+            mCamera.setParameters(mCameraParameters);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Not able to set preview dimensions");
+        }
     }
 
     private TreeSet<AspectRatio> findCommonAspectRatios(List<Camera.Size> previewSizes, List<Camera.Size> captureSizes) {
