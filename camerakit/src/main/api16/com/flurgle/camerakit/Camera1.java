@@ -80,10 +80,14 @@ public class Camera1 extends CameraImpl {
 
     @Override
     void start() {
-        setFacing(mFacing);
-        openCamera();
-        if (mPreview.isReady()) setupPreview();
-        mCamera.startPreview();
+        try {
+            setFacing(mFacing);
+            openCamera();
+            if (mPreview.isReady()) setupPreview();
+            mCamera.startPreview();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Failed to start preview");
+        }
     }
 
     @Override
@@ -203,30 +207,34 @@ public class Camera1 extends CameraImpl {
 
     @Override
     void captureImage() {
-        switch (mMethod) {
-            case METHOD_STANDARD:
-                mCamera.takePicture(null, null, null, new Camera.PictureCallback() {
-                    @Override
-                    public void onPictureTaken(byte[] data, Camera camera) {
-                        mCameraListener.onPictureTaken(data);
-                        camera.startPreview();
-                    }
-                });
-                break;
+        try {
+            switch (mMethod) {
+                case METHOD_STANDARD:
+                    mCamera.takePicture(null, null, null, new Camera.PictureCallback() {
+                        @Override
+                        public void onPictureTaken(byte[] data, Camera camera) {
+                            mCameraListener.onPictureTaken(data);
+                            camera.startPreview();
+                        }
+                    });
+                    break;
 
-            case METHOD_STILL:
-                mCamera.setOneShotPreviewCallback(new Camera.PreviewCallback() {
-                    @Override
-                    public void onPreviewFrame(byte[] data, Camera camera) {
-                        new Thread(new ProcessStillTask(data, camera, mCameraInfo, new ProcessStillTask.OnStillProcessedListener() {
-                            @Override
-                            public void onStillProcessed(final YuvImage yuv) {
-                                mCameraListener.onPictureTaken(yuv);
-                            }
-                        })).start();
-                    }
-                });
-                break;
+                case METHOD_STILL:
+                    mCamera.setOneShotPreviewCallback(new Camera.PreviewCallback() {
+                        @Override
+                        public void onPreviewFrame(byte[] data, Camera camera) {
+                            new Thread(new ProcessStillTask(data, camera, mCameraInfo, new ProcessStillTask.OnStillProcessedListener() {
+                                @Override
+                                public void onStillProcessed(final YuvImage yuv) {
+                                    mCameraListener.onPictureTaken(yuv);
+                                }
+                            })).start();
+                        }
+                    });
+                    break;
+            }
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Failed to capture image");
         }
     }
 
@@ -340,13 +348,18 @@ public class Camera1 extends CameraImpl {
 
     private void releaseCamera() {
         if (mCamera != null) {
-            mCamera.setPreviewCallback(null);
-            mCamera.release();
-            mCamera = null;
-            mCameraParameters = null;
-            mPreviewSize = null;
-            mCaptureSize = null;
-            mCameraListener.onCameraClosed();
+            try {
+                mCamera.setPreviewCallback(null);
+                mCamera.release();
+                mCamera = null;
+                mCameraParameters = null;
+                mPreviewSize = null;
+                mCaptureSize = null;
+                mCameraListener.onCameraClosed();
+
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to release camera");
+            }
         }
     }
 
@@ -416,20 +429,24 @@ public class Camera1 extends CameraImpl {
     }
 
     private void initMediaRecorder() {
-        mMediaRecorder = new MediaRecorder();
-        mCamera.unlock();
+        try {
+            mMediaRecorder = new MediaRecorder();
+            mCamera.unlock();
 
-        mMediaRecorder.setCamera(mCamera);
-        mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-        mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-        mMediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_480P));
+            mMediaRecorder.setCamera(mCamera);
+            mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
+            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
+            mMediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_480P));
 
-        mVideoFile = new File(mPreview.getView().getContext().getExternalFilesDir(null), "video.mp4");
-        mMediaRecorder.setOutputFile(mVideoFile.getAbsolutePath());
+            mVideoFile = new File(mPreview.getView().getContext().getExternalFilesDir(null), "video.mp4");
+            mMediaRecorder.setOutputFile(mVideoFile.getAbsolutePath());
 
-        mMediaRecorder.setMaxDuration(20000);
-        mMediaRecorder.setMaxFileSize(5000000);
-        mMediaRecorder.setOrientationHint(mCameraInfo.orientation);
+            mMediaRecorder.setMaxDuration(20000);
+            mMediaRecorder.setMaxFileSize(5000000);
+            mMediaRecorder.setOrientationHint(mCameraInfo.orientation);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Failed to init media recorder");
+        }
     }
 
     private void prepareMediaRecorder() {
@@ -468,44 +485,47 @@ public class Camera1 extends CameraImpl {
             public boolean onTouch(View v, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_UP) {
                     if (mCamera != null) {
+                        try {
+                            Camera.Parameters parameters = mCamera.getParameters();
+                            if (parameters.getMaxNumMeteringAreas() > 0) {
+                                Rect rect = calculateFocusArea(event.getX(), event.getY());
 
-                        Camera.Parameters parameters = mCamera.getParameters();
-                        if (parameters.getMaxNumMeteringAreas() > 0) {
-                            Rect rect = calculateFocusArea(event.getX(), event.getY());
+                                parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                                List<Camera.Area> meteringAreas = new ArrayList<>();
+                                meteringAreas.add(new Camera.Area(rect, getFocusMeteringAreaWeight()));
+                                parameters.setFocusAreas(meteringAreas);
+                                parameters.setMeteringAreas(meteringAreas);
 
-                            parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-                            List<Camera.Area> meteringAreas = new ArrayList<>();
-                            meteringAreas.add(new Camera.Area(rect, getFocusMeteringAreaWeight()));
-                            parameters.setFocusAreas(meteringAreas);
-                            parameters.setMeteringAreas(meteringAreas);
+                                mCamera.setParameters(parameters);
+                                mCamera.autoFocus(new Camera.AutoFocusCallback() {
+                                    @Override
+                                    public void onAutoFocus(boolean success, Camera camera) {
+                                        camera.cancelAutoFocus();
+                                        Camera.Parameters params = camera.getParameters();
+                                        if (Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE.equals(params.getFocusMode())) {
+                                            params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+                                            params.setFocusAreas(null);
+                                            params.setMeteringAreas(null);
+                                            camera.setParameters(params);
+                                        }
 
-                            mCamera.setParameters(parameters);
-                            mCamera.autoFocus(new Camera.AutoFocusCallback() {
-                                @Override
-                                public void onAutoFocus(boolean success, Camera camera) {
-                                    camera.cancelAutoFocus();
-                                    Camera.Parameters params = camera.getParameters();
-                                    if (params.getFocusMode() != Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE) {
-                                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
-                                        params.setFocusAreas(null);
-                                        params.setMeteringAreas(null);
-                                        camera.setParameters(params);
+                                        if (mAutofocusCallback != null) {
+                                            mAutofocusCallback.onAutoFocus(success, camera);
+                                        }
                                     }
-
-                                    if (mAutofocusCallback != null) {
-                                        mAutofocusCallback.onAutoFocus(success, camera);
+                                });
+                            } else {
+                                mCamera.autoFocus(new Camera.AutoFocusCallback() {
+                                    @Override
+                                    public void onAutoFocus(boolean success, Camera camera) {
+                                        if (mAutofocusCallback != null) {
+                                            mAutofocusCallback.onAutoFocus(success, camera);
+                                        }
                                     }
-                                }
-                            });
-                        } else {
-                            mCamera.autoFocus(new Camera.AutoFocusCallback() {
-                                @Override
-                                public void onAutoFocus(boolean success, Camera camera) {
-                                    if (mAutofocusCallback != null) {
-                                        mAutofocusCallback.onAutoFocus(success, camera);
-                                    }
-                                }
-                            });
+                                });
+                            }
+                        } catch (RuntimeException e) {
+                            Log.e(TAG, "Failed to open camera");
                         }
                     }
                 }
