@@ -311,16 +311,19 @@ public class Camera1 extends CameraImpl {
         if (mCamera != null) {
             releaseCamera();
         }
+        try {
+            mCamera = Camera.open(mCameraId);
+            mCameraParameters = mCamera.getParameters();
 
-        mCamera = Camera.open(mCameraId);
-        mCameraParameters = mCamera.getParameters();
+            adjustCameraParameters();
+            mCamera.setDisplayOrientation(
+                    calculateCameraRotation(mDisplayOrientation)
+            );
 
-        adjustCameraParameters();
-        mCamera.setDisplayOrientation(
-                calculateCameraRotation(mDisplayOrientation)
-        );
-
-        mCameraListener.onCameraOpened();
+            mCameraListener.onCameraOpened();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Failed to open camera");
+        }
     }
 
     private void setupPreview() {
