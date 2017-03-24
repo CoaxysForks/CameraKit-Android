@@ -5,6 +5,7 @@ import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.View;
@@ -30,6 +31,7 @@ public class Camera1 extends CameraImpl {
 
     private static final int FOCUS_AREA_SIZE_DEFAULT = 300;
     private static final int FOCUS_METERING_AREA_WEIGHT_DEFAULT = 1000;
+    private static final String TAG = Camera1.class.getSimpleName();
 
     private int mCameraId;
     private Camera mCamera;
@@ -86,8 +88,12 @@ public class Camera1 extends CameraImpl {
 
     @Override
     void stop() {
-        if (mCamera != null) mCamera.stopPreview();
-        releaseCamera();
+        try {
+            if (mCamera != null) mCamera.stopPreview();
+            releaseCamera();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Not able to stop preview");
+        }
     }
 
     @Override
@@ -122,18 +128,22 @@ public class Camera1 extends CameraImpl {
         if (mCameraParameters != null) {
             List<String> flashes = mCameraParameters.getSupportedFlashModes();
             String internalFlash = new ConstantMapper.Flash(flash).map();
-            if (flashes != null && flashes.contains(internalFlash)) {
-                mCameraParameters.setFlashMode(internalFlash);
-                mFlash = flash;
-            } else {
-                String currentFlash = new ConstantMapper.Flash(mFlash).map();
-                if (flashes == null || !flashes.contains(currentFlash)) {
-                    mCameraParameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
-                    mFlash = FLASH_OFF;
-                }
-            }
 
-            mCamera.setParameters(mCameraParameters);
+            try {
+                if (flashes != null && flashes.contains(internalFlash)) {
+                    mCameraParameters.setFlashMode(internalFlash);
+                    mFlash = flash;
+                } else {
+                    String currentFlash = new ConstantMapper.Flash(mFlash).map();
+                    if (flashes == null || !flashes.contains(currentFlash)) {
+                        mCameraParameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+                        mFlash = FLASH_OFF;
+                    }
+                }
+                mCamera.setParameters(mCameraParameters);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Not able to set flash");
+            }
         } else {
             mFlash = flash;
         }
@@ -321,12 +331,13 @@ public class Camera1 extends CameraImpl {
                 mCamera.setPreviewTexture(mPreview.getSurfaceTexture());
             }
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            Log.e(TAG, "setupPreview: Not able to set preview");
         }
     }
 
     private void releaseCamera() {
         if (mCamera != null) {
+            mCamera.setPreviewCallback(null);
             mCamera.release();
             mCamera = null;
             mCameraParameters = null;
@@ -360,7 +371,7 @@ public class Camera1 extends CameraImpl {
                 getCaptureResolution().getHeight()
         );
         int rotation = (calculateCameraRotation(mDisplayOrientation)
-                + (mFacing == CameraKit.Constants.FACING_FRONT ? 180 : 0) ) % 360;
+                + (mFacing == CameraKit.Constants.FACING_FRONT ? 180 : 0)) % 360;
         mCameraParameters.setRotation(rotation);
 
         setFocus(mFocus);
