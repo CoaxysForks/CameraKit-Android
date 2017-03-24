@@ -356,27 +356,33 @@ public class Camera1 extends CameraImpl {
     }
 
     private void adjustCameraParameters() {
-        mPreview.setTruePreviewSize(
-                getPreviewResolution().getWidth(),
-                getPreviewResolution().getHeight()
-        );
-
-        mCameraParameters.setPreviewSize(
-                getPreviewResolution().getWidth(),
-                getPreviewResolution().getHeight()
-        );
-
-        mCameraParameters.setPictureSize(
-                getCaptureResolution().getWidth(),
-                getCaptureResolution().getHeight()
-        );
-        int rotation = (calculateCameraRotation(mDisplayOrientation)
-                + (mFacing == CameraKit.Constants.FACING_FRONT ? 180 : 0)) % 360;
-        mCameraParameters.setRotation(rotation);
-
-        setFocus(mFocus);
-        setFlash(mFlash);
         try {
+            Size previewResolution = getPreviewResolution();
+            if (previewResolution != null) {
+                mPreview.setTruePreviewSize(
+                        previewResolution.getWidth(),
+                        previewResolution.getHeight()
+                );
+
+                mCameraParameters.setPreviewSize(
+                        previewResolution.getWidth(),
+                        previewResolution.getHeight()
+                );
+            }
+
+            Size captureResolution = getCaptureResolution();
+            if (captureResolution != null) {
+                mCameraParameters.setPictureSize(
+                        captureResolution.getWidth(),
+                        captureResolution.getHeight()
+                );
+            }
+            int rotation = (calculateCameraRotation(mDisplayOrientation)
+                    + (mFacing == CameraKit.Constants.FACING_FRONT ? 180 : 0)) % 360;
+            mCameraParameters.setRotation(rotation);
+
+            setFocus(mFocus);
+            setFlash(mFlash);
             mCamera.setParameters(mCameraParameters);
         } catch (RuntimeException e) {
             Log.e(TAG, "Not able to set preview dimensions");
