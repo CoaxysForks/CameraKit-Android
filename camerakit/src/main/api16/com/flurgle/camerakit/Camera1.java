@@ -330,7 +330,7 @@ public class Camera1 extends CameraImpl {
             } else {
                 mCamera.setPreviewTexture(mPreview.getSurfaceTexture());
             }
-        } catch (IOException e) {
+        } catch (RuntimeException | IOException e) {
             Log.e(TAG, "setupPreview: Not able to set preview");
         }
     }
